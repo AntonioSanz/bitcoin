@@ -1,0 +1,141 @@
+<html>
+<head>
+<title>WebSocket Test</title>
+<script language="javascript" type="text/javascript">
+ var wsUri = "wss://ws.blockchain.info/inv";
+ var output;
+ var contador=0;
+ var totalEnviado=0, totalRecibido=0, totalComisiones=0;
+ var maximoEnviado=0, maximoRecibido=0, maximaComision=0;
+ 
+ function init() {
+  output = document.getElementById("output");
+  resumen = document.getElementById("resumen");
+  testWebSocket();
+  setTimeout("sendPing()",30000);
+ }
+
+ function testWebSocket() {
+  websocket = new WebSocket(wsUri);
+  websocket.onopen = function(evt) { onOpen(evt) };
+  websocket.onclose = function(evt) { onClose(evt) };
+  websocket.onmessage = function(evt) { onMessage(evt) };
+  websocket.onerror = function(evt) { onError(evt) };
+ }
+
+ function onOpen(evt) {
+  writeToScreen("<b>CONNECTED</b><br>");
+  //doSend('{"op":"addr_sub", "addr":"19mT1YwtuqxJV7WHsBYJ7JJfmTwJcc4TXe"}');
+  //doSend('{"op":"addr_sub", "addr":"1CSbBAvjMhscMfyQzVV24RSGffQabMhpK8"}');
+  //doSend('{"op":"addr_sub", "addr":"1ABPyzrkJZyDK7ssu1G2ibEgT92aduLVcu"}');
+  //doSend('{"op":"ping_tx"}');
+  //doSend('{"op":"ping_block"}');
+  doSend('{"op":"unconfirmed_sub"}');
+  doSend('{"op":"blocks_sub"}');
+ }
+
+ function onClose(evt) {
+  writeToScreen("<b>DISCONNECTED</b><br>");
+  setTimeout("sendPing()",1000);
+ }
+
+ function onMessage(evt) {
+  var cadena="";
+  var tipo="DESDE";
+  var sumaDesde=0, sumaHasta=0;
+  var ultimaTX="";
+  
+  var transaccion=JSON.parse(evt.data);
+  if(transaccion.op=="utx") {
+   contador++;
+   cadena=cadena + "TRANSACTION: "+ contador +"<table border=0><tr><td bgcolor='#EEEEEE'>&nbsp;";
+   
+   for(var n in transaccion.x.inputs) {
+    if(n>0) cadena=cadena +"&nbsp;<br>&nbsp;";
+    cadena=cadena +"#"+ transaccion.x.inputs[n].prev_out.tx_index +": ";
+    cadena=cadena + transaccion.x.inputs[n].prev_out.addr +" ";
+    if(transaccion.x.inputs[n].prev_out.spent==true) cadena=cadena + "<font color=red>";
+    cadena=cadena +"-"+ (transaccion.x.inputs[n].prev_out.value/100000) +"mBTC";
+    if(transaccion.x.inputs[n].prev_out.spent==true) cadena=cadena + "</font>";
+    sumaDesde+=transaccion.x.inputs[n].prev_out.value;
+   }
+   maximoEnviado=Math.max(sumaDesde/100000,maximoEnviado);
+   cadena=cadena + "&nbsp;</td><td>&nbsp;<font size=4>&rarr;</font>&nbsp;</td><td bgcolor='#EEEEEE'>&nbsp;";
+   for(var n in transaccion.x.out) {
+    if(n==0) ultimaTX=transaccion.x.out[n].tx_index;
+    else cadena=cadena +"&nbsp;<br>&nbsp;";
+    cadena=cadena +"#"+ transaccion.x.out[n].tx_index +": ";
+    cadena=cadena + transaccion.x.out[n].addr +" ";
+    if(transaccion.x.out[n].spent==true) cadena=cadena + "<font color=red>"; else  cadena=cadena + "<font color=green>";
+    cadena=cadena +"+"+ (transaccion.x.out[n].value/100000) +"mBTC";
+    if(transaccion.x.out[n].spent==true || true) cadena=cadena + "</font>";
+    sumaHasta+=transaccion.x.out[n].value;
+    maximoRecibido=Math.max(maximoRecibido,transaccion.x.out[n].value/100000);
+   }
+  } else if(transaccion.op=="block") {
+   cadena=cadena + "BLOCK:<table border=0><tr><td>&nbsp;";
+   cadena=cadena +"height: "+ transaccion.x.height;
+   cadena=cadena +"&nbsp;<br>&nbsp;";
+   cadena=cadena +"index: "+ transaccion.x.blockIndex;
+   cadena=cadena +"&nbsp;<br>&nbsp;";
+   //for(var n in transaccion.x.txIndexes) {
+   // if(n>0) cadena=cadena +", "
+   // cadena=cadena + transaccion.x.txIndexes[n];
+   //}
+   cadena=cadena +"&nbsp;<br>&nbsp;"+ (transaccion.x.totalBTCSent/100000) +"mBTC";
+   cadena=cadena +"<br>";
+  } else cadena=cadena + transaccion.op +"?:<br>";
+   cadena=cadena + "&nbsp;</td></tr></table>";
+  
+  if(transaccion.op=="utx") {
+   var enviado=sumaDesde/100000;
+   var recibido=sumaHasta/100000;
+   var comision=(sumaDesde-sumaHasta)/100000;
+   maximaComision=Math.max(maximaComision,comision);
+   totalEnviado+=enviado;
+   totalRecibido+=recibido;
+   totalComisiones+=comision;
+   cadena=cadena +"Envio: -"+ enviado +"mBTC, reciben: +"+ recibido +"mBTC, comision: +"+ comision +"mBTC<br>";
+   resumen.innerHTML="Enviado: "+ (parseInt(totalEnviado)/1000) +"BTC (max.: "+ maximoEnviado +"mBTC)<br>"
+                    +"Recibido: "+ (parseInt(totalRecibido)/1000)+"BTC (max.: "+ maximoRecibido +"mBTC)<br>"
+                    +"Comisiones: "+ (parseInt(totalComisiones)/1000) +"BTC (max.: "+ maximaComision +"mBTC)<br>"
+                    +"Ultima: #"+ ultimaTX;
+  }
+  if(transaccion.op=="utx" || transaccion.op=="block")
+   writeToScreen('<span style="color: blue;"><b>RESPONSE: </b>'+ cadena +'</span>');
+   //if(transaccion.op=="block") websocket.close();
+ }
+
+ function onError(evt) {
+  writeToScreen('<span style="color: red;">ERROR:</span> ' + evt.data);
+ }
+
+ function doSend(message) {
+  //writeToScreen("<b>SENT: </b>" + message +"<br>");
+  websocket.send(message);
+ }
+
+ function writeToScreen(message) {
+  var pre = document.createElement("span");
+  pre.style.wordWrap = "break-word";
+  pre.innerHTML = message;
+  output.insertBefore(pre,output.childNodes[0]); //.appendChild(pre);
+  if(output.childNodes.length>10) output.removeChild(output.childNodes[10]);
+ }
+
+ function sendPing() {
+  doSend('{"op":"ping"}');
+  //doSend('{"op":"ping_tx"}');
+  setTimeout("sendPing()",30000);
+ }
+ 
+ window.addEventListener("load", init, false);
+</script>
+</head>
+<body>
+<h2>Red Bitcoin</h2>
+<div id="resumen"></div>
+<br>
+<div id="output"></div>
+</body>
+</html>
