@@ -1,0 +1,137 @@
+<html>
+<head>
+<title>Bitcoin Wallet See</title>
+<script language="javascript" type="text/javascript">
+ var xmlhttp = new XMLHttpRequest();
+ var Direccion="",Desde=0,Otra=false;
+ var Cambio=0,Contador=0;
+ var BalanceTotal=0;
+ var VerCuantasTransacciones=10;
+ 
+ xmlhttp.onreadystatechange = function() {
+  if (this.readyState==4 && this.status==200) {
+   //document.getElementById("debug").innerHTML="<pre>"+ this.responseText +"</pre>";
+   var myArr=JSON.parse(this.responseText);
+   if(Direccion=="") {
+    Cambio=myArr.EUR.last;
+    document.getElementById("info").innerHTML="1BTC="+ Cambio +"&euro;&nbsp;&nbsp;&nbsp;1mBTC="+ (Cambio/1000).toFixed(2) +"&euro;&nbsp;&nbsp;&nbsp;1mBTC=100000 Satoshi";
+    document.getElementById("visor").innerHTML="Leyendo informacion de Blockchain...";
+    verInfo();
+   } else {
+    myFunction(myArr);
+    if(Desde>0) verInfo();
+    else if(Contador>1) {
+     var Cadena=document.getElementById("visor").innerHTML;
+     Cadena+="<br><b>Balance total: </b>"+BalanceTotal;
+     Cadena+=" "+ (BalanceTotal/100000).toFixed(2) +"mBTC";
+     Cadena+=" ("+ (BalanceTotal/100000000*Cambio).toFixed(2) +"&euro;)";
+     document.getElementById("visor").innerHTML=Cadena;
+    }
+   }
+  }
+ };
+ 
+ function myFunction(arr) {
+  var Balance=0,TotalRecibido=0,TotalEnviado=0,BalancePrevio=0;
+  var out="<table border=0>",outtr="";
+  var Tansacciones=0;
+  Contador++;
+  out+="<tr><td colspan=5>Direccion "+Contador+": "+ arr.address + "</td></tr>";
+  
+  for(var i=0;i<arr.txs.length;i++) {
+   for(var k=0;k<arr.txs[i].inputs.length;k++) {
+    if(arr.txs[i].inputs[k].prev_out.addr==Direccion)  {
+     var Fecha=new Date(arr.txs[i].time*1000);
+     Tansacciones++;
+     if(Tansacciones<=VerCuantasTransacciones)
+      outtr="<tr><td align=right>"+Tansacciones+".</td><td>Enviado: </td><td align=right>-"+ arr.txs[i].inputs[k].prev_out.value +"</td><td>("+ ((arr.txs[i].inputs[k].prev_out.spent==false)?"<font color=green>No g":"<font color=red>G") +"astado</font>)</td><td>"+ Fecha.toLocaleString() +"</td><td><a href='https://blockchain.info/es/tx/"+arr.txs[i].hash+"' target='_new'>"+arr.txs[i].hash+"</a></td></tr>"+ outtr;
+     else BalancePrevio-=arr.txs[i].inputs[k].prev_out.value;
+     Balance-=arr.txs[i].inputs[k].prev_out.value;
+     TotalEnviado+=arr.txs[i].inputs[k].prev_out.value;
+    }
+   }
+   for(var j=0;j<arr.txs[i].out.length;j++) {
+    if(arr.txs[i].out[j].addr==Direccion) {
+     var Fecha=new Date(arr.txs[i].time*1000);
+     Tansacciones++;
+     if(Tansacciones<=VerCuantasTransacciones)
+      outtr="<tr><td align=right>"+Tansacciones+".</td><td>Recibido: </td><td align=right>+"+ arr.txs[i].out[j].value +"</td><td>("+ ((arr.txs[i].out[j].spent==false)?"<font color=green>No g":"<font color=red>G") +"astado</font>)</td><td>"+ Fecha.toLocaleString() +"</td><td><a href='https://blockchain.info/es/tx/"+arr.txs[i].hash+"' target='_new'>"+arr.txs[i].hash+"</a></td></tr>"+ outtr;
+     else BalancePrevio+=arr.txs[i].out[j].value;
+     Balance+=arr.txs[i].out[j].value;
+     TotalRecibido+=arr.txs[i].out[j].value;
+    }
+   }
+  }
+  if(Tansacciones>VerCuantasTransacciones)
+   outtr="<tr><td align=right>"+Tansacciones+".</td><td>Previo: </td><td align=right>"+((BalancePrevio>=0)?"+":"")+ BalancePrevio +"</td></tr>"+ outtr;
+  BalanceTotal+=Balance;
+  out+=outtr;
+  out+=verCantidadResumen(TotalRecibido,TotalEnviado,Balance)
+  out+="</table>";
+  if(Otra==true) out=document.getElementById("visor").innerHTML+"<br>"+out;
+  document.getElementById("visor").innerHTML=out;
+  Otra=true;
+ }
+ 
+ function verCantidadResumen(Recibido,Enviado,Balance) {
+  var Cadena="";
+  Cadena+=verCantidadIndicada("Recibido",Recibido);
+  Cadena+=verCantidadIndicada("Enviado",Enviado);
+  Cadena+=verCantidadIndicada("Balance",Balance);  
+  return Cadena;
+ }
+ 
+ function verCantidadIndicada(Texto,Cantidad) {
+  var Cadena="";
+  Cadena+="<tr><td colspan=2><b>"+ Texto +": </td>";
+  Cadena+="    <td align=right>"+ Cantidad +"</td>";
+  Cadena+="    <td align=right>"+ (Cantidad/100000).toFixed(2) +"mBTC</td>";
+  Cadena+="    <td>("+ (Cantidad/100000000*Cambio).toFixed(2) +"&euro;)</td>";
+  Cadena+="</tr>";
+  return Cadena;
+ }
+ 
+ function leeCambio() {
+   xmlhttp.open("GET","https://blockchain.info/es/ticker",true);
+   xmlhttp.send();
+ }
+ 
+ function verInfo() {
+  var Bucle=true,nuevaDireccion="";
+  var loc = document.location.href;
+  if(loc.indexOf('?')>0) {
+   while(Bucle) {
+    if(Desde==0) var posIni=loc.indexOf('?');
+    else var posIni=Desde;
+    var posFin=loc.indexOf("|",posIni+1);
+    if(posFin>posIni) { nuevaDireccion=loc.substring(posIni+1,posFin); }
+    else { nuevaDireccion=loc.substring(posIni+1); PosFin=-1; }
+    if(nuevaDireccion=="vertodas") {
+     VerCuantasTransacciones=999;
+     Desde=posFin;
+    } else if(nuevaDireccion!=Direccion && nuevaDireccion!="") {
+     Direccion=nuevaDireccion;
+     var url="https://blockchain.info/es/address/"+ Direccion +"?format=json";
+     xmlhttp.open("GET",url,true);
+     xmlhttp.send();
+     Desde=posFin;
+     Bucle=false;
+    } else {
+     Desde=-1;
+     Bucle=false;
+    }
+   }
+  } else if(Desde==0) {
+   document.getElementById("visor").innerHTML="No se ha especificado una direccion bitcoin.";
+   Desde=-1;
+  } else Desde=-1;
+ }
+</script>
+</head>
+<body onLoad="Javascript:leeCambio();">
+<div id="info">Leyendo cambio BTC a &euro;</div>
+<br>
+<div id="visor"></div>
+<br>
+<div id="debug"></div>
+</html>
